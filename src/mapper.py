@@ -28,6 +28,7 @@ s3_client = boto3.client('s3')
 
 # Mapper의 결과가 작성될 S3 Bucket 위치
 TASK_MAPPER_PREFIX = "task/mapper/"
+SORT_NUM = 10
 
 
 # 주어진 bucket 위치 경로에 파일 이름이 key인 object와 data를 저장합니다.
@@ -44,11 +45,15 @@ def lambda_handler(event, context):
     job_id = event['jobId']
     mapper_id = event['mapperId']
 
-    output = {}
+    output = [
+        {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+    ]
+
     line_count = 0
     err = ''
 
     # 입력 CSV => 츌력 JSON 포멧
+    print('src_key: ', src_keys)
 
     # 모든 key를 다운로드하고 Map을 처리합니다.
     for key in src_keys:
@@ -59,11 +64,12 @@ def lambda_handler(event, context):
             line_count += 1
             try:
                 data = line.split(',')
-                print('data: ', data)
                 srcIp = data[0][:8]
-                if srcIp not in output:
-                    output[srcIp] = 0
-                output[srcIp] += float(data[3])
+                for first_num in range(SORT_NUM):
+                    if int(srcIp[0]) == first_num:
+                        if srcIp not in output[first_num]:
+                            output[first_num][srcIp] = 0
+                        output[first_num][srcIp] += float(data[3])
             except Exception as e:
                 print(e)
 
@@ -71,7 +77,11 @@ def lambda_handler(event, context):
 
     # Mapper의 결과를 전처리, 이후에 S3에 저장
     pret = [len(src_keys), line_count, time_in_secs, err]
-    mapper_fname = "%s/%s%s" % (job_id, TASK_MAPPER_PREFIX, mapper_id)
+    mapper_fname = []
+
+    for first_num in range(SORT_NUM):
+        mapper_fname.append("%s/%s%s/%s" % (job_id, TASK_MAPPER_PREFIX, str(first_num), mapper_id))
+
     metadata = {
         "linecount": '%s' % line_count,
         "processingtime": '%s' % time_in_secs,
@@ -80,5 +90,8 @@ def lambda_handler(event, context):
     print("metadata", metadata)
 
     # 이 부분을 efs로 변경 시도 해야 할 듯 함.
-    write_to_s3(job_bucket, mapper_fname, json.dumps(output), metadata)
+
+    for first_num in range(SORT_NUM):
+        write_to_s3(job_bucket, mapper_fname[first_num], json.dumps(output), metadata)
+
     return pret

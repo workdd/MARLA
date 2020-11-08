@@ -99,9 +99,9 @@ n_mappers = len(batches) # 최종적으로 구한 batches의 개수가 mapper로
 L_PREFIX = "BL"
 
 # Lambda Functions 이름을 지정합니다.
-mapper_lambda_name = L_PREFIX + "-mapper-" +  job_id;
-reducer_lambda_name = L_PREFIX + "-reducer-" +  job_id; 
-rc_lambda_name = L_PREFIX + "-rc-" +  job_id;
+mapper_lambda_name = L_PREFIX + "-mapper-" +  job_id
+reducer_lambda_name = L_PREFIX + "-reducer-" +  job_id
+rc_lambda_name = L_PREFIX + "-rc-" +  job_id
 
 # Job 환경 설정을 json으로 파일 씁니다.
 write_job_config(job_id, job_bucket, n_mappers, reducer_lambda_name, config["reducer"]["handler"]);
@@ -153,7 +153,7 @@ def invoke_lambda(batches, m_id):
 
     batch = [k.key for k in batches[m_id-1]]
 
-    resp = lambda_client.invoke( 
+    resp = lambda_client.invoke(
             FunctionName = mapper_lambda_name,
             InvocationType = 'RequestResponse',
             Payload =  json.dumps({
@@ -198,10 +198,10 @@ total_s3_put_ops = 0
 s3_storage_hours = 0
 total_lines = 0
 
-for output in mapper_outputs:
-    total_s3_get_ops += int(output[0])
-    total_lines += int(output[1])
-    total_lambda_secs += float(output[2])
+# for output in mapper_outputs:
+#     total_s3_get_ops += int(output[0])
+#     total_lines += int(output[1])
+#     total_lambda_secs += float(output[2])
 
 mapper_lambda_time = total_lambda_secs
 

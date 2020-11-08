@@ -1,5 +1,5 @@
 '''
-Coordinator
+REDUCER Coordinator 
 
 * Copyright 2016, Amazon.com, Inc. or its affiliates. All Rights Reserved.
 *
@@ -12,7 +12,7 @@ Coordinator
 * or in the "license" file accompanying this file. This file is distributed
 * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
 * express or implied. See the License for the specific language governing
-* permissions and limitations under the License.
+* permissions and limitations under the License. 
 '''
 
 import boto3
@@ -34,6 +34,7 @@ s3 = boto3.resource('s3')
 s3_client = boto3.client('s3')
 # Lambda session 생성
 lambda_client = boto3.client('lambda')
+SORT_NUM = 10
 
 
 # 주어진 bucket 위치 경로에 파일 이름이 key인 object와 data를 저장합니다.
@@ -56,12 +57,12 @@ def write_reducer_state(n_reducers, n_s3, bucket, fname):
 def get_mapper_files(files):
     ret = []
     for mf in files:
-        if "task/mapper" in mf["Key"]:
+        if "task/mapper/0" in mf["Key"]:
             ret.append(mf)
     return ret
 
 
-# reducer의 배치 ㅅ이지를 가져옵니다.
+# reducer의 배치 사이를 가져옵니다.
 def get_reducer_batch_size(keys):
     # TODO: Paramertize memory size
     batch_size = lambdautils.compute_batch_size(keys, 1536, 1000)
@@ -94,7 +95,7 @@ def get_reducer_state_info(files, job_id, job_bucket):
                 r_index = idx
             reducer_step = True
 
-    # Reducer의 상태가 완료인지 확인합니다.
+    # Reducer의 상태가 완료인지 확인합니다. 
     if reducer_step == False:
         return [MAPPERS_DONE, get_mapper_files(files)]
     else:
@@ -119,9 +120,7 @@ def get_reducer_state_info(files, job_id, job_bucket):
 
 
 def lambda_handler(event, context):
-    print("Received event: " + json.dumps(event, indent=2))
-
-    start_time = time.time();
+    start_time = time.time()
 
     # Job Bucket으로 이 Bucket으로부터 notification을 받습니다.
     bucket = event['Records'][0]['s3']['bucket']['name']
@@ -132,65 +131,33 @@ def lambda_handler(event, context):
     r_function_name = config["reducerFunction"]
     r_handler = config["reducerHandler"]
 
+
     ### Mapper 완료된 수를 count 합니다. ###
 
     # Job 파일들을 가져옵니다.
     files = s3_client.list_objects(Bucket=bucket, Prefix=job_id)["Contents"]
+    mapper_keys = get_mapper_files(files)
+    print("Mappers Done so far ", len(mapper_keys))
 
-    if check_job_done(files) == True:
-        print("Job done!!! Check the result file")
-        return
+    if map_count == len(mapper_keys):
+
+        # 모든 mapper가 완료되었다면, reducer를 시작합니다.
+
+        for i in range(SORT_NUM):
+            # Reducer Lambda를 비동기식(asynchronously)으로 호출(invoke)합니다.
+
+            resp = lambda_client.invoke(
+                FunctionName=r_function_name,
+                InvocationType='Event',
+                Payload=json.dumps({
+                    "bucket": bucket,
+                    "jobBucket": bucket,
+                    "jobId": job_id,
+                    "reducerId": i
+                })
+            )
+            print(resp)
+
+        # Reducer의 상태를 S3에 저장합니다.
     else:
-        mapper_keys = get_mapper_files(files)
-        print("Mappers Done so far ", len(mapper_keys))
-
-        if map_count == len(mapper_keys):
-
-            # 모든 mapper가 완료되었다면, reducer를 시작합니다.
-            stepInfo = get_reducer_state_info(files, job_id, bucket)
-
-            print("stepInfo", stepInfo)
-
-            step_number = stepInfo[0]
-            reducer_keys = stepInfo[1]
-
-            if len(reducer_keys) == 0:
-                print("Still waiting to finish Reducer step ", step_number)
-                return
-
-            # 메타데이터(metadata in S3)의 파일을 기반으로 Reduce의 배치 사이즈를 계산합니다.
-            r_batch_size = get_reducer_batch_size(reducer_keys)
-
-            print("Starting the the reducer step", step_number)
-            print("Batch Size", r_batch_size)
-
-            r_batch_params = lambdautils.batch_creator(reducer_keys, r_batch_size);
-
-            n_reducers = len(r_batch_params)
-            n_s3 = n_reducers * len(r_batch_params[0])
-            step_id = step_number + 1
-
-            for i in range(len(r_batch_params)):
-                batch = [b['Key'] for b in r_batch_params[i]]
-
-                # Reducer Lambda를 비동기식(asynchronously)으로 호출(invoke)합니다.
-                resp = lambda_client.invoke(
-                    FunctionName=r_function_name,
-                    InvocationType='Event',
-                    Payload=json.dumps({
-                        "bucket": bucket,
-                        "keys": batch,
-                        "jobBucket": bucket,
-                        "jobId": job_id,
-                        "nReducers": n_reducers,
-                        "stepId": step_id,
-                        "reducerId": i
-                    })
-                )
-                print(resp)
-
-            # Reducer의 상태를 S3에 저장합니다.
-            fname = "%s/reducerstate.%s" % (job_id, step_id)
-            write_reducer_state(n_reducers, n_s3, bucket, fname)
-        else:
-            print("Still waiting for all the mappers to finish ..")
+        print("Still waiting for all the mappers to finish ..")

@@ -41,12 +41,10 @@ def lambda_handler(event, context):
     start_time = time.time()
 
     job_bucket = event['jobBucket']
-    bucket = event['bucket']
-    reducer_keys = event['keys']
     job_id = event['jobId']
     r_id = event['reducerId']
-    step_id = event['stepId']
-    n_reducers = event['nReducers']
+
+    reduce_files = 'bl-release'
 
     results = {}
     line_count = 0
@@ -56,35 +54,34 @@ def lambda_handler(event, context):
     # 모든 key를 다운로드하고 Reduce를 처리합니다.
     # Reducer는 Mapper의 output 개수에 따라 1/2씩 처리가 되며 Reducer의 step 개수가 결정됩니다.
     # Mapper의 output 개수가 64개라면 (step:output개수/1:32/2:16/3:12.8/4:4/5:2/6:1) 총 6단계 reduce 발생
-    for key in reducer_keys:
-        response = s3_client.get_object(Bucket=job_bucket, Key=key)
-        contents = response['Body'].read()
 
-        try:
-            for srcIp, val in json.loads(contents).items():
-                line_count += 1
-                if srcIp not in results:
-                    results[srcIp] = 0
-                results[srcIp] += float(val)
-        except Exception as e:
-            print(e)
+    files = s3_client.list_objects(Bucket=job_bucket, Prefix=reduce_files)['Contents']
+    for mf in files:
+        if "task/mapper/" + str(r_id) in mf["Key"]:
+            key = mf["Key"]
+            print('key: ', key)
+            response = s3_client.get_object(Bucket=job_bucket, Key=key)
+            contents = response['Body'].read()
+            print('contents: ', contents)
+            print('str(contents)', str(contents))
+            try:
+                for srcIp, val in json.loads(contents).items():
+                    line_count += 1
+                    if srcIp not in results:
+                        results[srcIp] = 0
+                    results[srcIp] += float(val)
+            except Exception as e:
+                print(e)
 
     time_in_secs = (time.time() - start_time)
-    pret = [len(reducer_keys), line_count, time_in_secs]
+    pret = [len(files), line_count, time_in_secs]
     print("Reducer output", pret)
-
-    if n_reducers == 1:
-        # 마지막 Reduce 단계의 file은 result로 저장합니다.
-        fname = "%s/result" % job_id
-    else:
-        # 중간 Reduce 단계의 저장
-        fname = "%s/%s%s/%s" % (job_id, TASK_REDUCER_PREFIX, step_id, r_id)
 
     metadata = {
         "linecount": '%s' % line_count,
         "processingtime": '%s' % time_in_secs,
         "memoryUsage": '%s' % resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     }
-
+    fname = "%s/%s%s" % (job_id, TASK_REDUCER_PREFIX, r_id)
     write_to_s3(job_bucket, fname, json.dumps(results), metadata)
     return pret

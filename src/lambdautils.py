@@ -11,7 +11,7 @@
  * or in the "license" file accompanying this file. This file is distributed
  * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
  * express or implied. See the License for the specific language governing
- * permissions and limitations under the License.
+ * permissions and limitations under the License. 
 '''
 
 import boto3
@@ -63,7 +63,7 @@ class LambdaManager(object):
             Publish=True
         )
         updated_arn = response['FunctionArn']
-        # parse arn and remove the release number (:n)
+        # parse arn and remove the release number (:n) 
         arn = ":".join(updated_arn.split(':')[:-1])
         self.function_arn = arn
         print(response)
@@ -75,7 +75,7 @@ class LambdaManager(object):
         try:
             self.create_lambda_function()
         except botocore.exceptions.ClientError as e:
-            # parse (Function already exist)
+            # parse (Function already exist) 
             self.update_function()
 
     def add_lambda_permission(self, sId, bucket):
@@ -153,7 +153,7 @@ def compute_batch_size(keys, lambda_memory, concurrent_lambdas):
     avg_object_size = size / len(keys)  # object 당 평균 크기 / len(keys) : input object의 전체 개수
     print("Dataset size: %s, nKeys: %s, avg: %s" % (size, len(keys), avg_object_size))
 
-    # 평균 object 크기가 하나의 Lambda에서 돌릴 수 있고, input object의 전체 개수가 동시 실행 수보다 적다면
+    # 평균 object 크기가 하나의 Lambda에서 돌릴 수 있고, input object의 전체 개수가 동시 실행 수보다 적다면 
     if avg_object_size < max_mem_for_data and len(keys) < concurrent_lambdas:
         b_size = 1
     else:
