@@ -63,8 +63,9 @@ def lambda_handler(event, context):
             response = s3_client.get_object(Bucket=job_bucket, Key=key)
             contents = response['Body'].read()
             print('contents: ', contents)
-            print('str(contents)', str(contents))
+            print('str(contents)', type(contents))
             try:
+                print('json.load: ', json.loads(contents))
                 for srcIp, val in json.loads(contents).items():
                     line_count += 1
                     if srcIp not in results:

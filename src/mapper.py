@@ -92,6 +92,6 @@ def lambda_handler(event, context):
     # 이 부분을 efs로 변경 시도 해야 할 듯 함.
 
     for first_num in range(SORT_NUM):
-        write_to_s3(job_bucket, mapper_fname[first_num], json.dumps(output), metadata)
+        write_to_s3(job_bucket, mapper_fname[first_num], json.dumps(output[first_num]), metadata)
 
     return pret
