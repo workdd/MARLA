@@ -67,6 +67,8 @@ def lambda_handler(event, context):
                 srcIp = data[0][:8]
                 for first_num in range(SORT_NUM):
                     if int(srcIp[0]) == first_num:
+                        if int(srcIp[0]) == 0:
+                            print('srcIp:', srcIp)
                         if srcIp not in output[first_num]:
                             output[first_num][srcIp] = 0
                         output[first_num][srcIp] += float(data[3])

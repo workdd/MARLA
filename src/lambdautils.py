@@ -97,7 +97,7 @@ class LambdaManager(object):
         S3에서 발생하는 이벤트(Object 생성)를 Lambda function으로 알림(notifincation) 설정합니다.
         '''
         if not prefix:
-            prefix = self.job_id + "/task";
+            prefix = self.job_id + "/task"
 
         self.s3.put_bucket_notification_configuration(
             Bucket=bucket,
