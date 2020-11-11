@@ -54,12 +54,16 @@ def write_reducer_state(n_reducers, n_s3, bucket, fname):
 
 
 # mapper의 파일 개수를 카운트 합니다. 파일 개수가 reducer의 step 수를 결정
-def get_mapper_files(files):
+def get_mapper_files(files, sort_num):
     ret = []
-    for mf in files:
-        if "task/mapper/0" in mf["Key"]:
-            ret.append(mf)
-    return ret
+    for i in range(sort_num):
+        for mf in files:
+            idx = str(i)
+            if "task/mapper/" + idx in mf["Key"]:
+                ret.append(mf)
+        if len(ret) > 0:
+            break
+    return len(ret)
 
 
 # reducer의 배치 사이를 가져옵니다.
@@ -131,21 +135,25 @@ def lambda_handler(event, context):
     r_function_name = config["reducerFunction"]
     r_handler = config["reducerHandler"]
 
-
     ### Mapper 완료된 수를 count 합니다. ###
 
     # Job 파일들을 가져옵니다.
-    files = s3_client.list_objects(Bucket=bucket, Prefix=job_id)["Contents"]
-    mapper_keys = get_mapper_files(files)
-    print("Mappers Done so far ", len(mapper_keys))
+    paginator = s3_client.get_paginator('list_objects_v2')
 
-    if map_count == len(mapper_keys):
+    files = []
+    pages = paginator.paginate(Bucket=bucket, Prefix=job_id)
+    for page in pages:
+        files += page['Contents']
+
+    mapper_keys_length = get_mapper_files(files, SORT_NUM)
+    print("Mappers Done so far ", mapper_keys_length)
+
+    if map_count == mapper_keys_length:
 
         # 모든 mapper가 완료되었다면, reducer를 시작합니다.
 
         for i in range(SORT_NUM):
             # Reducer Lambda를 비동기식(asynchronously)으로 호출(invoke)합니다.
-
             resp = lambda_client.invoke(
                 FunctionName=r_function_name,
                 InvocationType='Event',
@@ -157,7 +165,6 @@ def lambda_handler(event, context):
                 })
             )
             print(resp)
-
-        # Reducer의 상태를 S3에 저장합니다.
+        return
     else:
         print("Still waiting for all the mappers to finish ..")

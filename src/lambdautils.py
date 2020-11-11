@@ -97,7 +97,7 @@ class LambdaManager(object):
         S3에서 발생하는 이벤트(Object 생성)를 Lambda function으로 알림(notifincation) 설정합니다.
         '''
         if not prefix:
-            prefix = self.job_id + "/task"
+            prefix = self.job_id + "/task/mapper"
 
         self.s3.put_bucket_notification_configuration(
             Bucket=bucket,
@@ -143,7 +143,7 @@ def compute_batch_size(keys, lambda_memory, concurrent_lambdas):
     '''
     Lambda의 메모리 크기와 동시 실행 수를 고려하여 batch size 계산합니다.
     '''
-    max_mem_for_data = 0.6 * lambda_memory * 1000 * 1000;  # Lambda 메모리 전체에 적재 가능한 최대 데이터 크기
+    max_mem_for_data = 0.6 * lambda_memory * 1000 * 1000  # Lambda 메모리 전체에 적재 가능한 최대 데이터 크기
     size = 0.0  # 전체 데이터 셋 사이즈 여기서는 24.4 GB
     for key in keys:
         if isinstance(key, dict):
@@ -171,7 +171,7 @@ def batch_creator(all_keys, batch_size):
     batches = []
     batch = []
     for i in range(len(all_keys)):  # input object의 전체 개수 만큼 for loop
-        batch.append(all_keys[i]);  # 단일 batch에 저장
+        batch.append(all_keys[i])  # 단일 batch에 저장
         if (len(batch) >= batch_size):  # compute_batch_size 구한 batch_size와 비교
             batches.append(batch)
             batch = []

@@ -45,9 +45,7 @@ def lambda_handler(event, context):
     job_id = event['jobId']
     mapper_id = event['mapperId']
 
-    output = [
-        {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
-    ]
+    output = {}
 
     line_count = 0
     err = ''
@@ -67,23 +65,22 @@ def lambda_handler(event, context):
                 srcIp = data[0][:8]
                 for first_num in range(SORT_NUM):
                     if int(srcIp[0]) == first_num:
-                        if int(srcIp[0]) == 0:
-                            print('srcIp:', srcIp)
-                        if srcIp not in output[first_num]:
-                            output[first_num][srcIp] = 0
-                        output[first_num][srcIp] += float(data[3])
+                        if srcIp[0] not in output:
+                            output[srcIp[0]] = {}
+                        if srcIp not in output[srcIp[0]]:
+                            output[srcIp[0]][srcIp] = 0
+                        output[srcIp[0]][srcIp] += float(data[3])
             except Exception as e:
-                print(e)
-
+                print('error', e)
+    print('output: ', output)
     time_in_secs = (time.time() - start_time)
 
     # Mapper의 결과를 전처리, 이후에 S3에 저장
     pret = [len(src_keys), line_count, time_in_secs, err]
-    mapper_fname = []
-
-    for first_num in range(SORT_NUM):
-        mapper_fname.append("%s/%s%s/%s" % (job_id, TASK_MAPPER_PREFIX, str(first_num), mapper_id))
-
+    mapper_fname = {}
+    for key in output:
+        mapper_fname[key] = "%s/%s%s/%s" % (job_id, TASK_MAPPER_PREFIX, key, mapper_id)
+    print('mapper_fname: ', mapper_fname)
     metadata = {
         "linecount": '%s' % line_count,
         "processingtime": '%s' % time_in_secs,
@@ -93,7 +90,8 @@ def lambda_handler(event, context):
 
     # 이 부분을 efs로 변경 시도 해야 할 듯 함.
 
-    for first_num in range(SORT_NUM):
-        write_to_s3(job_bucket, mapper_fname[first_num], json.dumps(output[first_num]), metadata)
-
+    for fname in mapper_fname:
+        write_to_s3(job_bucket, mapper_fname[fname], json.dumps(output[fname]), metadata)
+        write_to_s3(job_bucket, job_id + "/reducer_count/" + fname, '', {})
+        write_to_s3(job_bucket, job_id + "/reducer_success/" + 'init', '', {})
     return pret

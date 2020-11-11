@@ -40,11 +40,10 @@ def write_to_s3(bucket, key, data, metadata):
 def lambda_handler(event, context):
     start_time = time.time()
 
+    bucket = event['bucket']
     job_bucket = event['jobBucket']
     job_id = event['jobId']
     r_id = event['reducerId']
-
-    reduce_files = 'bl-release'
 
     results = {}
     line_count = 0
@@ -52,20 +51,20 @@ def lambda_handler(event, context):
     # 입력 CSV => 츌력 JSON 포멧
 
     # 모든 key를 다운로드하고 Reduce를 처리합니다.
-    # Reducer는 Mapper의 output 개수에 따라 1/2씩 처리가 되며 Reducer의 step 개수가 결정됩니다.
-    # Mapper의 output 개수가 64개라면 (step:output개수/1:32/2:16/3:12.8/4:4/5:2/6:1) 총 6단계 reduce 발생
+    isMapped = False
 
-    files = s3_client.list_objects(Bucket=job_bucket, Prefix=reduce_files)['Contents']
+    paginator = s3_client.get_paginator('list_objects_v2')
+    files = []
+    pages = paginator.paginate(Bucket=job_bucket, Prefix=job_id)
+    for page in pages:
+        files += page['Contents']
     for mf in files:
         if "task/mapper/" + str(r_id) in mf["Key"]:
+            isMapped = True
             key = mf["Key"]
-            print('key: ', key)
             response = s3_client.get_object(Bucket=job_bucket, Key=key)
             contents = response['Body'].read()
-            print('contents: ', contents)
-            print('str(contents)', type(contents))
             try:
-                print('json.load: ', json.loads(contents))
                 for srcIp, val in json.loads(contents).items():
                     line_count += 1
                     if srcIp not in results:
@@ -73,7 +72,8 @@ def lambda_handler(event, context):
                     results[srcIp] += float(val)
             except Exception as e:
                 print(e)
-
+    if not isMapped:
+        return
     time_in_secs = (time.time() - start_time)
     pret = [len(files), line_count, time_in_secs]
     print("Reducer output", pret)
@@ -84,5 +84,7 @@ def lambda_handler(event, context):
         "memoryUsage": '%s' % resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     }
     fname = "%s/%s%s" % (job_id, TASK_REDUCER_PREFIX, r_id)
+    print('fname: ', fname)
     write_to_s3(job_bucket, fname, json.dumps(results), metadata)
+    write_to_s3(job_bucket, job_id + "/reducer_success/" + str(r_id), "", metadata)
     return pret
